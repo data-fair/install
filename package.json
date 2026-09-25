@@ -1,0 +1,21 @@
+{
+  "name": "@data-fair/install",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "test-unit": "playwright test --project unit",
+    "lint": "node scripts/lint.ts",
+    "validate": "node scripts/validate.ts",
+    "check-versions": "node scripts/check-versions.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^26.6.2",
+    "eslint": "^9.39.5",
+    "neostandard": "^0.13.0",
+    "typescript": "^6.0.3"
+  }
+}
