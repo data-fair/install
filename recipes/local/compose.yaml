@@ -1,0 +1,170 @@
+# Data Fair – local recipe
+# usage: cp .env.example .env, edit .env, then: docker compose up -d
+
+x-healthcheck: &healthcheck
+  interval: 10s
+  timeout: 5s
+  retries: 30
+  start_period: 20s
+
+x-data-fair-env: &data-fair-env
+  PUBLIC_URL: ${BASE_URL}/data-fair
+  DIRECTORY_URL: ${BASE_URL}/simple-directory
+  PRIVATE_DIRECTORY_URL: http://simple-directory:8080
+  PRIVATE_EVENTS_URL: http://events:8080
+  CAPTURE_URL: ${BASE_URL}/capture
+  PRIVATE_CAPTURE_URL: http://capture:8080
+  PRIVATE_OPENAPI_VIEWER_URL: http://openapi-viewer:8080
+  PRIVATE_PORTALS_MANAGER_URL: http://portals-manager:8080
+  MONGO_URL: mongodb://mongo:27017/data-fair
+  ES_HOST: elasticsearch:9200
+  SECRET_IDENTITIES: ${SECRET}
+  SECRET_EVENTS: ${SECRET}
+  SECRET_SENDMAILS: ${SECRET}
+
+services:
+
+  nginx:
+    image: nginx:1.29-alpine
+    restart: unless-stopped
+    ports:
+      - 80:80
+    volumes:
+      - ./nginx.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ./proxy.conf:/etc/nginx/includes/proxy.conf:ro
+    healthcheck:
+      <<: *healthcheck
+      test: ['CMD-SHELL', 'nginx -t -q']
+
+  data-fair:
+    image: ghcr.io/data-fair/data-fair:6
+    restart: unless-stopped
+    depends_on: { mongo: { condition: service_healthy }, elasticsearch: { condition: service_healthy } }
+    volumes:
+      - data-fair-data:/data
+    environment:
+      <<: *data-fair-env
+      MODE: server
+      OBSERVER_ACTIVE: 'false'
+    healthcheck:
+      <<: *healthcheck
+      test: ['CMD', 'node', '-e', "fetch('http://localhost:8080/api/v1/ping').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+
+  data-fair-worker:
+    image: ghcr.io/data-fair/data-fair:6
+    restart: unless-stopped
+    depends_on: { mongo: { condition: service_healthy }, elasticsearch: { condition: service_healthy } }
+    volumes:
+      - data-fair-data:/data
+    environment:
+      <<: *data-fair-env
+      MODE: worker
+    healthcheck:
+      <<: *healthcheck
+      # the worker has no HTTP API, its prometheus observer tells that it is alive
+      test: ['CMD', 'node', '-e', "fetch('http://localhost:9090/metrics').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+
+  simple-directory:
+    image: ghcr.io/data-fair/simple-directory:8
+    restart: unless-stopped
+    depends_on: { mongo: { condition: service_healthy } }
+    environment:
+      PUBLIC_URL: ${BASE_URL}/simple-directory
+      MONGO_URL: mongodb://mongo:27017/simple-directory
+      CIPHER_PASSWORD: ${CIPHER_PASSWORD}
+      ADMINS: ${ADMINS}
+      CONTACT: admin@example.com
+      HOME_PAGE: ${BASE_URL}/data-fair/
+      MAILS_TRANSPORT: '{"host":"maildev","port":1025,"ignoreTLS":true}'
+      MAILS_FROM: no-reply@example.com
+      MAILDEV_ACTIVE: 'true'
+      MAILDEV_URL: ${BASE_URL}/mails/
+      PRIVATE_EVENTS_URL: http://events:8080
+      IDENTITIES_WEBHOOKS: '[{"base":"http://data-fair:8080/api/v1/identities","key":"${SECRET}"},{"base":"http://events:8080/api/identities","key":"${SECRET}"},{"base":"http://portals-manager:8080/api/identities","key":"${SECRET}"}]'
+      SECRET_SENDMAILS: ${SECRET}
+      SECRET_EVENTS: ${SECRET}
+      SECRET_SITES: ${SECRET}
+      MANAGE_SITES: 'true'
+      MANAGE_DEPARTMENTS: 'true'
+      OBSERVER_ACTIVE: 'false'
+    healthcheck:
+      <<: *healthcheck
+      test: ['CMD', 'node', '-e', "fetch('http://localhost:8080/.well-known/jwks.json').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+
+  events:
+    image: ghcr.io/data-fair/events:1
+    restart: unless-stopped
+    depends_on: { mongo: { condition: service_healthy } }
+    environment:
+      MONGO_URL: mongodb://mongo:27017/events
+      PRIVATE_DIRECTORY_URL: http://simple-directory:8080
+      SECRET_IDENTITIES: ${SECRET}
+      SECRET_EVENTS: ${SECRET}
+      SECRET_SENDMAILS: ${SECRET}
+      OBSERVER_ACTIVE: 'false'
+    healthcheck:
+      <<: *healthcheck
+      test: ['CMD', 'node', '-e', "fetch('http://localhost:8080/api/ping').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+
+  openapi-viewer:
+    image: ghcr.io/data-fair/openapi-viewer:2
+    restart: unless-stopped
+    environment:
+      USE_SIMPLE_DIRECTORY: 'true'
+      PRIVATE_DIRECTORY_URL: http://simple-directory:8080
+      ALLOWED_URLS: '{"dataFair":"/data-fair/api/v1/api-docs.json","dataset":"/data-fair/api/v1/datasets/{id}/api-docs.json","datasetPrivate":"/data-fair/api/v1/datasets/{id}/private-api-docs.json","application":"/data-fair/api/v1/applications/{id}/api-docs.json"}'
+    healthcheck:
+      <<: *healthcheck
+      test: ['CMD', 'node', '-e', "fetch('http://localhost:8080/openapi-viewer/').then(r => process.exit(r.status < 500 ? 0 : 1), () => process.exit(1))"]
+
+  capture:
+    image: ghcr.io/data-fair/capture:3
+    restart: unless-stopped
+    shm_size: 1gb
+    environment:
+      PUBLIC_URL: ${BASE_URL}/capture
+      PRIVATE_DIRECTORY_URL: http://simple-directory:8080
+      ONLY_SAME_HOST: 'true'
+      # the browser reaches the platform through the nginx container instead of resolving the public host name
+      PUPPETEER_ARGS: '["--no-sandbox","--host-resolver-rules=MAP localhost nginx, MAP *.localhost nginx"]'
+      OBSERVER_ACTIVE: 'false'
+    healthcheck:
+      <<: *healthcheck
+      test: ['CMD', 'node', '-e', "fetch('http://localhost:8080/api/v1/api-docs.json').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+
+  maildev:
+    image: maildev/maildev:2.2.1
+    restart: unless-stopped
+    environment:
+      MAILDEV_BASE_PATHNAME: /mails
+    healthcheck:
+      <<: *healthcheck
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:1080/mails/healthz']
+
+  elasticsearch:
+    image: ghcr.io/data-fair/elasticsearch:8.19.9
+    restart: unless-stopped
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: 'false'
+      ingest.geoip.downloader.enabled: 'false'
+      ES_JAVA_OPTS: -Xms1g -Xmx1g
+    healthcheck:
+      <<: *healthcheck
+      test: ['CMD-SHELL', 'curl -fs "localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s"']
+
+  mongo:
+    image: mongo:8.0
+    restart: unless-stopped
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      <<: *healthcheck
+      test: ['CMD', 'mongosh', '--quiet', '--eval', 'db.runCommand({ ping: 1 }).ok']
+
+volumes:
+  data-fair-data:
+  elasticsearch-data:
+  mongo-data:

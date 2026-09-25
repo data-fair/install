@@ -1,0 +1,35 @@
+# nginx configuration for the local Data Fair recipe
+# no path prefix is stripped, every service is reached with its prefix
+
+server {
+  listen 80 default_server;
+  server_name localhost;
+
+  include /etc/nginx/includes/proxy.conf;
+
+  location = / {
+    return 302 /data-fair/;
+  }
+
+  location /data-fair/ { set $upstream http://data-fair:8080; proxy_pass $upstream; }
+  location /simple-directory/ { set $upstream http://simple-directory:8080; proxy_pass $upstream; }
+  location /events/ { set $upstream http://events:8080; proxy_pass $upstream; }
+  location /openapi-viewer/ { set $upstream http://openapi-viewer:8080; proxy_pass $upstream; }
+  location /capture/ { set $upstream http://capture:8080; proxy_pass $upstream; }
+  location /portals-manager/ { set $upstream http://portals-manager:8080; proxy_pass $upstream; }
+  location /mails/ { set $upstream http://maildev:1080; proxy_pass $upstream; }
+}
+
+# portals, served on subdomains: http://{portal id}.portal.localhost
+server {
+  listen 80;
+  server_name ~^.+\.portal\.localhost$;
+
+  include /etc/nginx/includes/proxy.conf;
+
+  location /data-fair/ { set $upstream http://data-fair:8080; proxy_pass $upstream; }
+  location /simple-directory/ { set $upstream http://simple-directory:8080; proxy_pass $upstream; }
+  location /events/ { set $upstream http://events:8080; proxy_pass $upstream; }
+  location /openapi-viewer/ { set $upstream http://openapi-viewer:8080; proxy_pass $upstream; }
+  location / { set $upstream http://portal:8080; proxy_pass $upstream; }
+}

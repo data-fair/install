@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { composeFiles, parseVariantArgs, testEnvOverrides } from '../../scripts/lib/recipes.ts'
+import { composeFiles, parseVariantArgs, testEnvOverrides, mongoKernelWorkaround } from '../../scripts/lib/recipes.ts'
 
 test('compose files per variant', () => {
   expect(composeFiles('local', { test: true })).toEqual(['compose.yaml'])
@@ -18,4 +18,14 @@ test('parseVariantArgs', () => {
 test('production test overrides point to localhost over http', () => {
   expect(testEnvOverrides('production')).toMatchObject({ DOMAIN: 'localhost', BASE_URL: 'http://localhost' })
   expect(testEnvOverrides('local')).toEqual({})
+})
+
+test('mongo image workaround only on kernels affected by SERVER-121912', () => {
+  expect(mongoKernelWorkaround('6.8.0-45-generic')).toBeNull()
+  expect(mongoKernelWorkaround('6.12.1')).toBeNull()
+  expect(mongoKernelWorkaround('6.19.2')).toBe('mongo:8.0.17')
+  expect(mongoKernelWorkaround('7.0.0-31-generic')).toBe('mongo:8.0.17')
+  expect(mongoKernelWorkaround('7.0.13')).toBe('mongo:8.0.17')
+  expect(mongoKernelWorkaround('7.0.14')).toBeNull()
+  expect(mongoKernelWorkaround('7.1.0')).toBeNull()
 })

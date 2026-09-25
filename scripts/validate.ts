@@ -1,9 +1,9 @@
 import { cp, mkdtemp, readFile, writeFile, mkdir, rm } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
-import { tmpdir, freemem, totalmem } from 'node:os'
+import { tmpdir, freemem, totalmem, release } from 'node:os'
 import { resolve, join } from 'node:path'
 import { spawnSync } from 'node:child_process'
-import { parseVariantArgs, recipeDir, composeFiles, testEnvOverrides } from './lib/recipes.ts'
+import { parseVariantArgs, recipeDir, composeFiles, testEnvOverrides, mongoKernelWorkaround } from './lib/recipes.ts'
 import { fillEnv } from './lib/env.ts'
 import { runCompose, waitHealthy, type ComposeProject } from './lib/compose.ts'
 import { servicesFor, mergeValidated, shouldRecord, renderLastValidated, type Service, type ValidatedVersions } from './lib/services.ts'
@@ -30,6 +30,12 @@ const dir = join(work, 'recipes', variant === 'local' ? 'local' : 'production')
 await writeFile(join(dir, '.env'), fillEnv(example, testEnvOverrides(variant)))
 const p: ComposeProject = { dir, name: `dfi-${variant.replace('+', '-')}`, files: composeFiles(variant, { test: true }), envFile: '.env' }
 log(`- work dir: ${dir}`)
+const mongoImage = mongoKernelWorkaround(release())
+if (mongoImage) {
+  await writeFile(join(dir, 'kernel-workaround.override.yaml'), `services:\n  mongo:\n    image: ${mongoImage}\n`)
+  p.files.push('kernel-workaround.override.yaml')
+  log(`- kernel ${release()} is affected by https://jira.mongodb.org/browse/SERVER-121912, mongo pinned to ${mongoImage}`)
+}
 
 let healthy = false
 let smokeCode = 1

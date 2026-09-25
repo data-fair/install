@@ -34,3 +34,13 @@ export function parseVariantArgs (argv: string[]): { variant: Variant, keep: boo
   if (bonus && recipe === 'local') throw new Error('--bonus only applies to the production recipe')
   return { variant: bonus ? 'production+bonus' : recipe, keep: flags.includes('--keep') }
 }
+
+// mongo >= 8.0.x recent patches refuse to start on linux 6.19 to 7.0.13 (TCMalloc rseq incompatibility,
+// https://jira.mongodb.org/browse/SERVER-121912), validation on such a machine pins the last version that starts
+export function mongoKernelWorkaround (kernelRelease: string): string | null {
+  const m = kernelRelease.match(/^(\d+)\.(\d+)\.(\d+)/)
+  if (!m) return null
+  const [maj, min, patch] = m.slice(1).map(Number)
+  const affected = (maj === 6 && min >= 19) || (maj === 7 && min === 0 && patch < 14)
+  return affected ? 'mongo:8.0.17' : null
+}
