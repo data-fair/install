@@ -1,0 +1,22 @@
+{
+  "date": "2026-09-25",
+  "runs": {
+    "local": "2026-09-25",
+    "production": "2026-09-25",
+    "production+bonus": "2026-09-25"
+  },
+  "versions": {
+    "data-fair": "6.20.0",
+    "simple-directory": "8.21.0",
+    "events": "1.4.1",
+    "openapi-viewer": "2.3.1",
+    "capture": "3.4.0",
+    "portals": "2.33.1",
+    "mongo": "8.0.17",
+    "elasticsearch": "8.19.9",
+    "metrics": "2.5.0",
+    "registry": "0.6.1",
+    "processings": "6.3.0",
+    "catalogs": "1.2.2"
+  }
+}

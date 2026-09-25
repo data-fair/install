@@ -44,7 +44,22 @@ In the configuration schemas, each property can be set with the environment vari
 ## Last validated
 
 <!-- last-validated -->
-Not validated yet.
+Last validated on 2026-09-25: local (2026-09-25), production (2026-09-25), production+bonus (2026-09-25).
+
+| Service | Version |
+|---|---|
+| capture | 3.4.0 |
+| catalogs | 1.2.2 |
+| data-fair | 6.20.0 |
+| elasticsearch | 8.19.9 |
+| events | 1.4.1 |
+| metrics | 2.5.0 |
+| mongo | 8.0.17 |
+| openapi-viewer | 2.3.1 |
+| portals | 2.33.1 |
+| processings | 6.3.0 |
+| registry | 0.6.1 |
+| simple-directory | 8.21.0 |
 <!-- /last-validated -->
 
 ## More documentation
