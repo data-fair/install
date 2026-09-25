@@ -5,6 +5,7 @@ import { SERVICES, type ValidatedVersions } from './lib/services.ts'
 import { latestVersion, extractEnvNames, requiredPaths, diffSets, bumpKind } from './lib/versions.ts'
 import { fetchTags, fetchRepoFile } from './lib/registries.ts'
 import { computeFindings, renderReport, type FileDiff } from './lib/drift.ts'
+import { syncIssue } from './lib/github-issue.ts'
 
 const root = resolve(import.meta.dirname, '..')
 const vPath = resolve(root, 'validated-versions.json')
@@ -44,3 +45,11 @@ if (validated) {
 
 const findings = computeFindings({ validated, latest, fileDiffs })
 console.log(renderReport(findings))
+
+if (process.argv.includes('--github-issue')) {
+  const token = process.env.GITHUB_TOKEN
+  const repo = process.env.GITHUB_REPOSITORY
+  if (!token || !repo) throw new Error('GITHUB_TOKEN and GITHUB_REPOSITORY are required with --github-issue')
+  const result = await syncIssue({ token, repo, title: 'Install docs drift', body: findings.length ? renderReport(findings) : null })
+  console.log(`drift issue: ${result}`)
+}
