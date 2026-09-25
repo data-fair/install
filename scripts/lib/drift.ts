@@ -1,8 +1,8 @@
 import type { ValidatedVersions } from './services.ts'
 import { SERVICES } from './services.ts'
-import { bumpKind } from './versions.ts'
+import { bumpKind, parseSemver } from './versions.ts'
 
-export type FileDiff = { path: string, missing: boolean, envAdded: string[], envRemoved: string[], requiredAdded: string[] }
+export type FileDiff = { path: string, missing: boolean, envAdded: string[], envRemoved: string[], requiredAdded: string[], error?: string }
 export type Finding = { service: string, level: 'action' | 'info', message: string, details?: string[] }
 
 // latest: service -> latest published version, null when it could not be determined
@@ -19,6 +19,10 @@ export function computeFindings (input: { validated: ValidatedVersions | null, l
       findings.push({ service, level: 'action', message: `never validated, latest is ${latest}` })
       continue
     }
+    if (!parseSemver(current)) {
+      findings.push({ service, level: 'action', message: `recorded version ${JSON.stringify(current)} is not x.y.z, validate again` })
+      continue
+    }
     const bump = bumpKind(current, latest)
     if (bump === 'none') continue
     const def = SERVICES.find(s => s.key === service)
@@ -26,6 +30,7 @@ export function computeFindings (input: { validated: ValidatedVersions | null, l
     // a pinned minor version (mongo, elasticsearch, registry) must be bumped by hand in the recipes
     let action = bump === 'major' || (def?.track === 'minor' && bump === 'minor')
     for (const d of input.fileDiffs[service] ?? []) {
+      if (d.error) { action = true; details.push(`\`${d.path}\` could not be compared: ${d.error}`) }
       if (d.missing) { action = true; details.push(`\`${d.path}\` not found at ${latest}, the repository layout changed`) }
       if (d.envRemoved.length) { action = true; details.push(`\`${d.path}\` removed: ${d.envRemoved.join(', ')}`) }
       if (d.requiredAdded.length) { action = true; details.push(`\`${d.path}\` newly required: ${d.requiredAdded.join(', ')}`) }

@@ -1,6 +1,6 @@
 # Local recipe
 
-Runs Data Fair and its main services on your computer, to try the platform or to develop extensions. Do not expose it to the internet: it uses plain HTTP and a mailbox that anyone can read.
+Runs Data Fair and its main services on your computer, to try the platform or to develop extensions. It is only reachable from your computer (nginx listens on the loopback interfaces): it uses plain HTTP and a mailbox that anyone reaching it could read. Do not change that to expose it to other machines.
 
 Services: nginx, data-fair (server and worker), simple-directory, events, openapi-viewer, capture, portals (manager and portal), MongoDB, Elasticsearch and [maildev](https://github.com/maildev/maildev), which catches every mail sent by the platform.
 

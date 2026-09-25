@@ -27,10 +27,13 @@ export const fetchTags = (s: Service, currentVersion?: string): Promise<string[]
   s.registry === 'ghcr' ? ghcrTags(s.image) : dockerHubTags(s.image, (currentVersion ?? '').split('.')[0] + '.')
 
 // a file of a service repository at a released version (git tags are "v1.2.3", some older ones "1.2.3")
-export async function fetchRepoFile (repo: string, version: string, path: string): Promise<string | null> {
+// null when the file does not exist, errors other than 404 are thrown to not be mistaken for a missing file
+export async function fetchRepoFile (repo: string, version: string, path: string, fetchImpl: typeof fetch = fetch): Promise<string | null> {
   for (const ref of [`v${version}`, version]) {
-    const res = await fetch(`https://raw.githubusercontent.com/${repo}/${ref}/${path}`)
+    const url = `https://raw.githubusercontent.com/${repo}/${ref}/${path}`
+    const res = await fetchImpl(url)
     if (res.ok) return res.text()
+    if (res.status !== 404) throw new Error(`${url}: ${res.status}`)
   }
   return null
 }

@@ -1397,7 +1397,7 @@ ADMINS=["admin@example.com"]
 # Contact address: shown to users, sender of mails, and owner of the letsencrypt certificates
 CONTACT_EMAIL=admin@example.com
 
-# SMTP transport, a JSON configuration object for nodemailer, see https://nodemailer.com/smtp/
+# SMTP transport, a JSON configuration object for nodemailer, see https://nodemailer.com/smtp
 MAILS_TRANSPORT={"host":"smtp.example.com","port":587,"auth":{"user":"CHANGE_ME","pass":"CHANGE_ME"}}
 
 # Certbot DNS plugin for the wildcard portals certificate, see docs/portals.md

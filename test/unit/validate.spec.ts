@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { mergeValidated, shouldRecord, servicesFor, renderLastValidated } from '../../scripts/lib/services.ts'
+import { mergeValidated, shouldRecord, servicesFor, renderLastValidated, versionProblems } from '../../scripts/lib/services.ts'
 
 test('shouldRecord only on full success', () => {
   expect(shouldRecord({ healthy: true, smokeCode: 0 })).toBe(true)
@@ -36,4 +36,17 @@ test('renderLastValidated', () => {
   const md = renderLastValidated({ date: '2026-02-01', runs: { local: '2026-02-01' }, versions: { 'data-fair': '6.2.0' } })
   expect(md).toContain('2026-02-01')
   expect(md).toContain('| data-fair | 6.2.0 |')
+})
+
+test('shouldRecord refuses a run whose running versions could not all be read', () => {
+  expect(shouldRecord({ healthy: true, smokeCode: 0, versionsOk: false })).toBe(false)
+})
+
+test('versionProblems lists services without a readable x.y.z version', () => {
+  const services = servicesFor('local')
+  const versions = Object.fromEntries(services.map(s => [s.key, '1.2.3']))
+  expect(versionProblems(versions, services)).toEqual([])
+  expect(versionProblems({ ...versions, portals: 'unknown', mongo: '' }, services)).toEqual(['portals: "unknown"', 'mongo: ""'])
+  const { events, ...missing } = versions
+  expect(versionProblems(missing, services)).toEqual(['events: not read'])
 })

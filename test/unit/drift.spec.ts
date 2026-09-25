@@ -56,3 +56,18 @@ test('renderReport puts actions first and says when all is in sync', () => {
   expect(md.indexOf('Action needed')).toBeLessThan(md.indexOf('For information'))
   expect(renderReport([])).toContain('in sync')
 })
+
+test('a recorded version that is not x.y.z is an action', () => {
+  const f = computeFindings({ validated: { ...validated, versions: { events: 'unknown' } }, latest: { events: '1.4.1' }, fileDiffs: {} })
+  expect(f[0]).toMatchObject({ service: 'events', level: 'action' })
+})
+
+test('a config diff that could not be computed is an action', () => {
+  const f = computeFindings({
+    validated,
+    latest: { events: '1.4.2' },
+    fileDiffs: { events: [{ path: 'x', missing: false, envAdded: [], envRemoved: [], requiredAdded: [], error: 'fetch failed' }] }
+  })
+  expect(f[0]).toMatchObject({ service: 'events', level: 'action' })
+  expect(f[0].details?.join()).toContain('fetch failed')
+})

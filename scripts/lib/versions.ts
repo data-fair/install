@@ -32,7 +32,7 @@ export function extractEnvNames (source: string): string[] {
   const names = new Set<string>()
   const runtime = source.match(/runtimeConfig:\s*\{([\s\S]*?)\}/)
   if (runtime) {
-    for (const m of runtime[1].matchAll(/(\w+)\s*:/g)) names.add('NUXT_' + snake(m[1]))
+    for (const m of runtime[1].matchAll(/^\s*(\w+)\s*:/gm)) names.add('NUXT_' + snake(m[1]))
   } else {
     for (const m of source.matchAll(/['"]([A-Z][A-Z0-9_]+)['"]/g)) names.add(m[1])
   }

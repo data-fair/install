@@ -15,17 +15,22 @@ const latest: Record<string, string | null> = {}
 const fileDiffs: Record<string, FileDiff[]> = {}
 
 async function diffFile (repo: string, from: string, to: string, path: string): Promise<FileDiff> {
-  const [before, after] = await Promise.all([fetchRepoFile(repo, from, path), fetchRepoFile(repo, to, path)])
-  const diff: FileDiff = { path, missing: after === null, envAdded: [], envRemoved: [], requiredAdded: [] }
-  if (after === null) return diff
-  if (path.endsWith('.json')) {
-    diff.requiredAdded = diffSets(before ? requiredPaths(JSON.parse(before)) : [], requiredPaths(JSON.parse(after))).added
-  } else {
-    const { added, removed } = diffSets(before ? extractEnvNames(before) : [], extractEnvNames(after))
-    diff.envAdded = added
-    diff.envRemoved = removed
+  const diff: FileDiff = { path, missing: false, envAdded: [], envRemoved: [], requiredAdded: [] }
+  try {
+    const [before, after] = await Promise.all([fetchRepoFile(repo, from, path), fetchRepoFile(repo, to, path)])
+    if (after === null) return { ...diff, missing: true }
+    if (path.endsWith('.json')) {
+      diff.requiredAdded = diffSets(before ? requiredPaths(JSON.parse(before)) : [], requiredPaths(JSON.parse(after))).added
+    } else {
+      const { added, removed } = diffSets(before ? extractEnvNames(before) : [], extractEnvNames(after))
+      diff.envAdded = added
+      diff.envRemoved = removed
+    }
+    return diff
+  } catch (err: any) {
+    // network errors, rate limits, unparsable files: reported, never fatal for the whole check
+    return { ...diff, error: err.message }
   }
-  return diff
 }
 
 if (validated) {

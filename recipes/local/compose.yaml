@@ -27,8 +27,10 @@ services:
   nginx:
     image: nginx:1.29-alpine
     restart: unless-stopped
+    # only reachable from this computer: the mailbox at /mails/ would let anyone on the network reset passwords
     ports:
-      - 80:80
+      - 127.0.0.1:80:80
+      - '[::1]:80:80'
     volumes:
       - ./nginx.conf.template:/etc/nginx/templates/default.conf.template:ro
       - ./proxy.conf:/etc/nginx/includes/proxy.conf:ro

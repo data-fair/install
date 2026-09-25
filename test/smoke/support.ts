@@ -3,7 +3,8 @@ import { setTimeout as sleep } from 'node:timers/promises'
 
 export const ADMIN_EMAIL = process.env.SMOKE_ADMIN_EMAIL ?? 'admin@example.com'
 export const ADMIN_PASSWORD = 'Smoke-test-Passw0rd!'
-export const storageStatePath = 'test-results/.smoke-session.json'
+// outside of test-results/, which any playwright run empties when it starts
+export const storageStatePath = process.env.SMOKE_STORAGE_STATE ?? '.smoke-session.json'
 export const variant = (process.env.SMOKE_VARIANT ?? 'local') as 'local' | 'production' | 'production+bonus'
 
 export function envValue (key: string): string {

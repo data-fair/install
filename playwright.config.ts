@@ -16,7 +16,7 @@ export default defineConfig({
       dependencies: ['smoke-setup'],
       timeout: 5 * 60_000,
       workers: 1,
-      use: { baseURL: process.env.SMOKE_BASE_URL ?? 'http://localhost', storageState: 'test-results/.smoke-session.json' }
+      use: { baseURL: process.env.SMOKE_BASE_URL ?? 'http://localhost', storageState: process.env.SMOKE_STORAGE_STATE ?? '.smoke-session.json' }
     }
   ]
 })

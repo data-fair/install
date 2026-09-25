@@ -4,3 +4,4 @@ test-results
 playwright-report
 .env
 .superpowers
+.smoke-session.json

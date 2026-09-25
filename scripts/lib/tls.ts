@@ -1,10 +1,11 @@
 import { connect } from 'node:tls'
 
 // the host names served by the production recipe and the certificate names each one must present
-export const expectedNames = (domain: string): Record<string, string[]> => ({
-  [domain]: [domain],
-  [`x.portal.${domain}`]: [`*.portal.${domain}`]
-})
+// a wildcard only covers one label, draft portals (<id>.draft.portal.<domain>) need their own
+export const expectedNames = (domain: string): Record<string, string[]> => {
+  const portals = [`*.portal.${domain}`, `*.draft.portal.${domain}`]
+  return { [domain]: [domain], [`x.portal.${domain}`]: portals, [`x.draft.portal.${domain}`]: portals }
+}
 
 // sans: served host -> subjectaltname string as returned by node tls ("DNS:a, DNS:b")
 export function certificateErrors (domain: string, sans: Record<string, string>): string[] {

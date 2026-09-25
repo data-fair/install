@@ -53,7 +53,18 @@ export function mergeValidated (prev: ValidatedVersions | null, variant: Variant
 }
 
 // tls is only checked for the production recipe
-export const shouldRecord = (r: { healthy: boolean, smokeCode: number, tls?: boolean }): boolean => r.healthy && r.smokeCode === 0 && r.tls !== false
+export const shouldRecord = (r: { healthy: boolean, smokeCode: number, tls?: boolean, versionsOk?: boolean }): boolean =>
+  r.healthy && r.smokeCode === 0 && r.tls !== false && r.versionsOk !== false
+
+// a validation is only recorded with an exact x.y.z version for each service of the run
+export function versionProblems (versions: Record<string, string>, services: Service[]): string[] {
+  const problems: string[] = []
+  for (const s of services) {
+    if (!(s.key in versions)) problems.push(`${s.key}: not read`)
+    else if (!/^\d+\.\d+\.\d+$/.test(versions[s.key])) problems.push(`${s.key}: ${JSON.stringify(versions[s.key])}`)
+  }
+  return problems
+}
 
 export function renderLastValidated (v: ValidatedVersions): string {
   const runs = Object.entries(v.runs).map(([k, d]) => `${k} (${d})`).join(', ')

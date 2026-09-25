@@ -42,3 +42,8 @@ test('requiredPaths walks nested properties', () => {
 test('diffSets', () => {
   expect(diffSets(['A', 'B'], ['B', 'C'])).toEqual({ added: ['C'], removed: ['A'] })
 })
+
+test('extractEnvNames ignores the values of a nuxt runtimeConfig (urls contain colons)', () => {
+  const nuxt = "  runtimeConfig: {\n    mainPublicUrl: 'http://localhost:5610',\n    privateDirectoryUrl: 'http://simple-directory:8081',\n    mongoUrl: 'mongodb://localhost:27022/data-fair-portals',\n    portalUrlPattern: ''\n  },"
+  expect(extractEnvNames(nuxt)).toEqual(['NUXT_MAIN_PUBLIC_URL', 'NUXT_MONGO_URL', 'NUXT_PORTAL_URL_PATTERN', 'NUXT_PRIVATE_DIRECTORY_URL'])
+})

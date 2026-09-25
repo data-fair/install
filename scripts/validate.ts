@@ -7,7 +7,7 @@ import { parseVariantArgs, recipeDir, composeFiles, testEnvOverrides, mongoKerne
 import { fillEnv } from './lib/env.ts'
 import { runCompose, waitHealthy, type ComposeProject } from './lib/compose.ts'
 import { runTlsCheck } from './lib/tls-check.ts'
-import { servicesFor, mergeValidated, shouldRecord, renderLastValidated, type Service, type ValidatedVersions } from './lib/services.ts'
+import { servicesFor, mergeValidated, shouldRecord, renderLastValidated, versionProblems, type Service, type ValidatedVersions } from './lib/services.ts'
 
 const root = resolve(import.meta.dirname, '..')
 const { variant, keep } = parseVariantArgs(process.argv.slice(2))
@@ -65,6 +65,7 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
 let healthy = false
 let smokeCode = 1
 let versions: Record<string, string> = {}
+let versionsOk = false
 try {
   // 3. start, exactly as documented (the README says: docker compose up -d)
   const up = await runCompose(p, ['up', '-d', '--pull', 'always', '--quiet-pull'], { inherit: true })
@@ -88,7 +89,8 @@ try {
       SMOKE_ADMIN_EMAIL: 'admin@example.com',
       SMOKE_ENV: env,
       SMOKE_COMPOSE_DIR: dir,
-      SMOKE_COMPOSE_PROJECT: p.name
+      SMOKE_COMPOSE_PROJECT: p.name,
+      SMOKE_STORAGE_STATE: join(work, 'smoke-session.json')
     }
   })
   smokeCode = smoke.status ?? 1
@@ -96,6 +98,9 @@ try {
 
   // 5. read running versions
   versions = await readVersions(p, servicesFor(variant))
+  const problems = versionProblems(versions, servicesFor(variant))
+  versionsOk = !problems.length
+  for (const problem of problems) log(`- VERSION NOT READ: ${problem}`)
   log('', '| Service | Version |', '|---|---|', ...Object.entries(versions).map(([k, v]) => `| ${k} | ${v} |`))
 } catch (err: any) {
   log(`- ERROR: ${err.message}`)
@@ -113,7 +118,7 @@ let tls: boolean | undefined
 if (variant !== 'local' && healthy && smokeCode === 0) tls = await runTlsCheck(log)
 
 if (interrupted) await new Promise(() => {}) // the signal handler exits once the teardown is over
-const ok = shouldRecord({ healthy, smokeCode, tls })
+const ok = shouldRecord({ healthy, smokeCode, tls, versionsOk })
 await mkdir(resolve(root, 'test/reports'), { recursive: true })
 const reportPath = resolve(root, `test/reports/${date}-${variant.replace('+', '-')}.md`)
 await writeFile(reportPath, report.join('\n') + '\n')
@@ -134,17 +139,25 @@ process.exit(ok ? 0 : 1)
 
 async function readVersions (p: ComposeProject, services: Service[]): Promise<Record<string, string>> {
   const out: Record<string, string> = {}
+  const run = async (args: string[]) => {
+    const r = await runCompose(p, args)
+    if (r.code !== 0) throw new Error(`docker compose ${args.join(' ')}: ${r.stderr}`)
+    return r.stdout.trim()
+  }
   for (const s of services) {
     const svc = s.composeServices[0]
-    if (s.versionFrom === 'label') {
-      const id = (await runCompose(p, ['ps', '-q', svc])).stdout.trim()
-      const r = spawnSync('docker', ['inspect', '--format', '{{index .Config.Labels "org.opencontainers.image.version"}}', id], { encoding: 'utf8' })
-      out[s.key] = r.stdout.trim() || 'unknown'
-    } else if (s.versionFrom === 'mongo') {
-      out[s.key] = (await runCompose(p, ['exec', '-T', svc, 'mongosh', '--quiet', '--eval', 'db.version()'])).stdout.trim()
-    } else {
-      const r = await runCompose(p, ['exec', '-T', svc, 'curl', '-s', 'localhost:9200'])
-      out[s.key] = JSON.parse(r.stdout).version.number
+    try {
+      if (s.versionFrom === 'label') {
+        const id = await run(['ps', '-q', svc])
+        const r = spawnSync('docker', ['inspect', '--format', '{{index .Config.Labels "org.opencontainers.image.version"}}', id], { encoding: 'utf8' })
+        out[s.key] = r.stdout.trim()
+      } else if (s.versionFrom === 'mongo') {
+        out[s.key] = await run(['exec', '-T', svc, 'mongosh', '--quiet', '--eval', 'db.version()'])
+      } else {
+        out[s.key] = JSON.parse(await run(['exec', '-T', svc, 'curl', '-s', 'localhost:9200'])).version.number
+      }
+    } catch (err: any) {
+      log(`- could not read the version of ${s.key}: ${err.message}`)
     }
   }
   return out

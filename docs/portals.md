@@ -23,13 +23,13 @@ data.example.org.            A   <server IP>
 *.portal.data.example.org.   A   <server IP>
 ```
 
-The wildcard record also covers the draft host names (`<id>.draft.portal.data.example.org`).
+The wildcard DNS record also covers the draft host names (`<id>.draft.portal.data.example.org`). A wildcard certificate doesn't (it only covers one label), so the portals certificate is requested for both `*.portal.<domain>` and `*.draft.portal.<domain>`.
 
 The local recipe needs no DNS: browsers resolve every `*.localhost` name to your computer.
 
 ## Wildcard certificate
 
-Letsencrypt only issues a wildcard certificate (`*.portal.<domain>`) through a DNS challenge. Certbot proves that you own the domain by creating a temporary DNS record through the API of your DNS provider. The main domain uses the usual HTTP challenge and needs nothing more.
+Letsencrypt only issues wildcard certificates (`*.portal.<domain>` and `*.draft.portal.<domain>`) through a DNS challenge. Certbot proves that you own the domain by creating a temporary DNS record through the API of your DNS provider. The main domain uses the usual HTTP challenge and needs nothing more.
 
 The production recipe relies on the conventions of [jonasal/nginx-certbot](https://github.com/JonasAlfredsson/docker-nginx-certbot/blob/master/docs/certbot_authenticators.md):
 

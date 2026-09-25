@@ -10,8 +10,16 @@ export async function syncIssue (opts: { token: string, repo: string, title: str
     if (!res.ok) throw new Error(`GitHub API ${method} ${url}: ${res.status} ${await res.text()}`)
     return res.json()
   }
-  const open: { number: number, body: string }[] = await call(`${api}?state=open&labels=${LABEL}`)
-  const existing = open[0]
+  type Issue = { number: number, title: string, body: string, pull_request?: unknown }
+  const labeled: Issue[] = await call(`${api}?state=open&labels=${LABEL}`)
+  let existing = labeled[0]
+  let relabel = false
+  if (!existing) {
+    // the label may have been dropped at creation (token not allowed to create labels): find the issue by title
+    const open: Issue[] = await call(`${api}?state=open&per_page=100`)
+    existing = open.find(i => i.title === opts.title && !i.pull_request) as Issue
+    relabel = !!existing
+  }
   if (opts.body === null) {
     if (!existing) return 'noop'
     await call(`${api}/${existing.number}/comments`, 'POST', { body: 'All services are in sync with the last validation, closing.' })
@@ -22,7 +30,7 @@ export async function syncIssue (opts: { token: string, repo: string, title: str
     await call(api, 'POST', { title: opts.title, body: opts.body, labels: [LABEL] })
     return 'created'
   }
-  if (existing.body === opts.body) return 'noop'
-  await call(`${api}/${existing.number}`, 'PATCH', { body: opts.body })
+  if (existing.body === opts.body && !relabel) return 'noop'
+  await call(`${api}/${existing.number}`, 'PATCH', relabel ? { body: opts.body, labels: [LABEL] } : { body: opts.body })
   return 'updated'
 }

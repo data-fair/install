@@ -1,11 +1,12 @@
 import { test, expect } from '@playwright/test'
 import { syncIssue } from '../../scripts/lib/github-issue.ts'
 
-function fakeFetch (openIssues: any[]) {
+function fakeFetch (openIssues: any[], openByTitle: any[] = []) {
   const calls: { method: string, url: string, body?: any }[] = []
   const impl = (async (url: string, init: any = {}) => {
     calls.push({ method: init.method ?? 'GET', url, body: init.body && JSON.parse(init.body) })
-    const json = (init.method ?? 'GET') === 'GET' ? openIssues : { number: 1 }
+    const method = init.method ?? 'GET'
+    const json = method === 'GET' ? (url.includes('labels=') ? openIssues : openByTitle) : { number: 1 }
     return new Response(JSON.stringify(json), { status: 200 })
   }) as unknown as typeof fetch
   return { impl, calls }
@@ -16,7 +17,7 @@ const base = { token: 't', repo: 'data-fair/install', title: 'Install docs drift
 test('creates the issue when findings and none open', async () => {
   const f = fakeFetch([])
   expect(await syncIssue({ ...base, body: 'report', fetchImpl: f.impl })).toBe('created')
-  expect(f.calls[1]).toMatchObject({ method: 'POST', body: { title: 'Install docs drift', body: 'report', labels: ['install-drift'] } })
+  expect(f.calls.find(c => c.method === 'POST')).toMatchObject({ body: { title: 'Install docs drift', body: 'report', labels: ['install-drift'] } })
 })
 
 test('updates the open issue', async () => {
@@ -45,4 +46,12 @@ test('noop when in sync and nothing open', async () => {
 test('api errors are thrown with their status', async () => {
   const impl = (async () => new Response('bad credentials', { status: 401 })) as unknown as typeof fetch
   await expect(syncIssue({ ...base, body: 'x', fetchImpl: impl })).rejects.toThrow(/401/)
+})
+
+test('finds the issue by title when its label was dropped, and labels it again', async () => {
+  const f = fakeFetch([], [{ number: 9, title: 'Install docs drift', body: 'old' }, { number: 3, title: 'other', body: '' }])
+  expect(await syncIssue({ ...base, body: 'new', fetchImpl: f.impl })).toBe('updated')
+  const patch = f.calls.find(c => c.method === 'PATCH')
+  expect(patch?.url).toMatch(/issues\/9$/)
+  expect(patch?.body).toMatchObject({ body: 'new', labels: ['install-drift'] })
 })
