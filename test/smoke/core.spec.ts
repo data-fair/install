@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { loginSuperadmin, createDataset } from './support.ts'
+import { createDataset } from './support.ts'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -8,8 +8,8 @@ test('every service answers through nginx', async ({ request }) => {
   const expected: Record<string, number> = {
     '/data-fair/api/v1/ping': 200,
     '/simple-directory/.well-known/jwks.json': 200,
-    // events ping is internal only, an authenticated route answers 401 to anonymous requests
-    '/events/api/notifications': 401,
+    // events ping is internal only, use an authenticated route (the session comes from auth.setup.ts)
+    '/events/api/notifications': 200,
     '/openapi-viewer/': 200,
     '/mails/': 200
   }
@@ -22,15 +22,7 @@ test('every service answers through nginx', async ({ request }) => {
   expect(root.headers().location).toContain('/data-fair/')
 })
 
-test('superadmin logs in', async ({ request }) => {
-  await loginSuperadmin(request)
-  const me = await request.get('/simple-directory/api/auth/me')
-  expect(me.ok()).toBeTruthy()
-  expect((await me.json()).isAdmin).toBeTruthy()
-})
-
 test('upload a csv, finalize it, query it', async ({ request }) => {
-  await loginSuperadmin(request)
   const id = await createDataset(request, 'Smoke dataset')
   const lines = await (await request.get(`/data-fair/api/v1/datasets/${id}/lines`)).json()
   expect(lines.total).toBe(3)
@@ -40,7 +32,6 @@ test('upload a csv, finalize it, query it', async ({ request }) => {
 })
 
 test('capture renders a screenshot', async ({ request, baseURL }) => {
-  await loginSuperadmin(request)
   const res = await request.get(`/capture/api/v1/screenshot?target=${encodeURIComponent(baseURL + '/data-fair/')}`, { timeout: 120_000 })
   expect(res.status(), await res.text()).toBe(200)
   expect(res.headers()['content-type']).toMatch(/^image\//)

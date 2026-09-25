@@ -50,12 +50,15 @@ try {
 
   // 4. smoke tests
   const env = await readFile(join(dir, '.env'), 'utf8')
+  // the public URL as compose resolves it from .env (BASE_URL may reference DOMAIN)
+  const resolved = JSON.parse((await runCompose(p, ['config', '--format', 'json'])).stdout)
+  const baseUrl: string = resolved.services['data-fair'].environment.PUBLIC_URL.replace(/\/data-fair$/, '')
   const smoke = spawnSync('npx', ['playwright', 'test', '--project', 'smoke'], {
     cwd: root,
     stdio: 'inherit',
     env: {
       ...process.env,
-      SMOKE_BASE_URL: 'http://localhost',
+      SMOKE_BASE_URL: baseUrl,
       SMOKE_VARIANT: variant,
       SMOKE_ADMIN_EMAIL: 'admin@example.com',
       SMOKE_ENV: env,

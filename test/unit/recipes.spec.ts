@@ -15,8 +15,8 @@ test('parseVariantArgs', () => {
   expect(() => parseVariantArgs([])).toThrow(/usage/)
 })
 
-test('production test overrides point to localhost over http', () => {
-  expect(testEnvOverrides('production')).toMatchObject({ DOMAIN: 'localhost', BASE_URL: 'http://localhost' })
+test('production test overrides point to a *.localhost host over http', () => {
+  expect(testEnvOverrides('production')).toMatchObject({ DOMAIN: 'datafair.localhost', BASE_URL: 'http://datafair.localhost' })
   expect(testEnvOverrides('local')).toEqual({})
 })
 

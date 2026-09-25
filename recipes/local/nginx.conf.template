@@ -3,7 +3,7 @@
 
 server {
   listen 80 default_server;
-  server_name localhost;
+  server_name ${DOMAIN};
 
   include /etc/nginx/includes/proxy.conf;
 
@@ -20,10 +20,10 @@ server {
   location /mails/ { set $upstream http://maildev:1080; proxy_pass $upstream; }
 }
 
-# portals, served on subdomains: http://{portal id}.portal.localhost
+# portals, served on subdomains: http://{portal id}.portal.${DOMAIN}
 server {
   listen 80;
-  server_name ~^.+\.portal\.localhost$;
+  server_name *.portal.${DOMAIN};
 
   include /etc/nginx/includes/proxy.conf;
 

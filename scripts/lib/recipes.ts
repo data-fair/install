@@ -16,11 +16,13 @@ export function composeFiles (v: Variant, opts: { test: boolean }): string[] {
 }
 
 // .env values replaced when validating a recipe on this machine
+// not plain "localhost": inside containers it designates the container itself, *.localhost is resolved by browsers
+// and reaches nginx from other containers through its network alias
 export function testEnvOverrides (v: Variant): Record<string, string> {
   if (v === 'local') return {}
   return {
-    DOMAIN: 'localhost',
-    BASE_URL: 'http://localhost',
+    DOMAIN: 'datafair.localhost',
+    BASE_URL: 'http://datafair.localhost',
     CONTACT_EMAIL: 'admin@example.com',
     ADMINS: '["admin@example.com"]',
     MAILS_TRANSPORT: '{"host":"maildev","port":1025,"ignoreTLS":true}'
