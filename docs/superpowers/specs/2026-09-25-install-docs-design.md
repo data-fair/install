@@ -22,7 +22,7 @@ This repository (`data-fair/install`) becomes the maintained home of the install
 - Kubernetes / Helm guidance.
 - A static site generator: docs are markdown read on github.com.
 - A duplicated configuration reference: we link to each service's config schema.
-- CI automation (validation runs locally only).
+- Running the full recipe validation in CI: it runs locally only. CI only runs the cheap weekly drift check and lint.
 - Backup service, agents, mcp, maps, tileserver, legacy portals v1, notify, thumbor.
 - French translation (docs are in English).
 
@@ -84,13 +84,22 @@ docs/
   upgrading.md                from the old v4 recipes (ES 7→8, Mongo 4.4→8, notify→events,
                               thumbor removal, portals v1→v2) and per-change entries later
 MAINTENANCE.md                the maintenance and validation protocol
+validated-versions.json       exact service versions of the last successful validation
+package.json                  Node 24, ESM, npm scripts: validate, check-versions, lint
+eslint.config.js              neostandard, like the rest of the stack
+.github/workflows/drift.yaml  weekly drift check + lint (cron + manual trigger)
+scripts/
+  validate.ts                 end-to-end validation of a recipe (compose orchestration + report)
+  check-versions.ts           drift detection: tags and config schema diffs
+  lint.ts                     compose config check for every recipe/overlay + markdown link check
+  lib/                        small shared helpers (compose runner, registries API, schema diff)
 test/
-  validate.sh                 end-to-end validation of a recipe
-  check-versions.sh           drift detection on image tags
   production.override.yaml    test-only overrides for the production recipe
-  smoke/                      Playwright smoke tests (own package.json)
+  smoke/*.spec.ts             Playwright smoke tests
   reports/                    git-ignored run reports
 ```
+
+Tooling follows the stack's conventions: Node 24 running `.ts` files directly (native type stripping, no build step), ESM, `@playwright/test` for the smoke tests, and neostandard eslint. There is no shell scripting beyond one-line npm scripts.
 
 ## Recipes
 
@@ -131,13 +140,13 @@ test/
 
 ## Validation protocol
 
-`test/validate.sh <local|production> [--bonus]`:
+`npm run validate -- <local|production> [--bonus] [--keep]` (`scripts/validate.ts`):
 
 1. Checks prerequisites (docker, compose v2, free ports 80/443, available memory) and fails early with a clear message.
 2. Copies the recipe to a temp directory and creates `.env` from `.env.example` with random secrets, the same way the README tells users to.
 3. For production, adds `test/production.override.yaml`. It replaces nginx-certbot with plain nginx over HTTP, sets the domain to `localhost` and portals to `*.portal.localhost`, and adds maildev in place of SMTP. The nginx config, metrics socket wiring and service configuration are otherwise used as shipped.
 4. Runs the README's commands (`docker compose ... up -d`) and waits for every container to be healthy, with a timeout. On failure it collects `docker compose ps` and logs.
-5. Runs the Playwright smoke tests in `test/smoke/`:
+5. Runs the Playwright smoke tests in `test/smoke/` (one Playwright project per recipe, base URL and flags passed through env):
    - The superadmin sets a password through the maildev reset mail and logs in.
    - Upload a small CSV, wait for the dataset to be finalized, then query its lines through the API.
    - The dataset API doc opens in openapi-viewer.
@@ -148,30 +157,47 @@ test/
      - registry, processings and catalogs answer their ping endpoints;
      - their UIs load for the superadmin;
      - plugin mirroring is tested only when `KOUMOUL_REGISTRY_API_KEY` is set, otherwise reported as skipped.
-6. Tears down with `docker compose down -v`, unless `--keep` is set.
-7. Writes `test/reports/<date>-<recipe>.md` with the image digests and versions, the step results and any skipped steps.
+6. Reads the exact running versions of each service (image labels or version endpoints), then tears down with `docker compose down -v` unless `--keep` is set.
+7. Writes `test/reports/<date>-<recipe>.md` with the versions, image digests, step results and any skipped steps.
+8. On full success, updates `validated-versions.json` for the services covered by that run, and the "Last validated" line in the README. The maintainer commits both.
 
-Also:
+Also, `npm run lint` (`scripts/lint.ts`):
 
-- `test/lint.sh` runs `docker compose config -q` on every recipe and overlay combination, plus a markdown link check (lychee via docker).
-- When a full validation succeeds, the maintainer updates the "Last validated" line in the README: date, recipes run, main service versions.
+- `docker compose config -q` on every recipe and overlay combination;
+- a markdown link check (lychee via docker);
+- eslint on the scripts.
 
-## Maintenance protocol (`MAINTENANCE.md`)
+## Drift detection and maintenance
 
-- `test/check-versions.sh` compares each image tag in the recipes with the latest published tags (ghcr.io tags API, Docker Hub for mongo). It flags new majors for data-fair services and new minors for mongo and elasticsearch.
-- Triggers:
-  - a new major release of a stack service;
-  - a user issue;
-  - a periodic check, suggested quarterly.
-- Procedure for each flagged service:
-  1. Read its changelog and diff its config schema (`api/config/type/schema.json` or equivalent) between the pinned and the new version.
+### Weekly drift check (CI)
+
+`.github/workflows/drift.yaml` runs weekly (cron) and on manual trigger. It runs `npm run lint` and `npm run check-versions`.
+
+`scripts/check-versions.ts`:
+
+- For every service in `validated-versions.json`, fetches the published tags (ghcr.io tags API; Docker Hub for mongo) and finds the latest version.
+- For each data-fair service that moved, fetches its config schema at the validated tag and at the latest tag (raw files from GitHub, no clone). It reports env vars (from `custom-environment-variables`) and schema properties that were added, removed, or became required.
+- Classifies each finding:
+  - **action needed:** a new major, a removed or newly required variable, or a new major/minor of mongo or elasticsearch;
+  - **info:** a new minor/patch that only adds optional variables.
+- Prints a markdown report. With `--github-issue`, it keeps a single issue titled "Install docs drift" in sync through the GitHub API with the workflow's `GITHUB_TOKEN`:
+  - creates or updates it when there are findings, action-needed first;
+  - closes it when everything matches.
+
+The check doesn't validate anything. It says when the docs may be stale and what changed, so the local procedure below can start.
+
+### Local procedure (`MAINTENANCE.md`)
+
+- Triggers: the drift issue, a user issue, or a new feature to document.
+- For each flagged service:
+  1. Read the drift report, the service changelog and, if needed, the full config schema diff.
   2. Update the compose files, `.env.example`, nginx config and prose.
   3. Add an entry to `docs/upgrading.md` when existing installs must act.
-  4. Run `test/lint.sh` and `test/validate.sh` for local, production and production `--bonus`.
-  5. Update "Last validated" and commit with a summary of the report.
+  4. Run `npm run lint`, then `npm run validate` for local, production, and production `--bonus`.
+  5. Commit the changes, `validated-versions.json` and the "Last validated" line, with a summary of the report. The next weekly run closes the drift issue.
 - Guidance for agents, in the same file:
   - Sources of truth are each service repo's config schema and dev compose, and the production infrastructure as a read-only reference. Never copy secrets or internal hostnames from the infrastructure.
-  - A doc change without a successful validation run must say so explicitly in the commit and the README.
+  - Never update `validated-versions.json` by hand. If a doc change is committed without a successful validation run, say so explicitly in the commit message.
 
 ## Related work: retiring data-fair.github.io
 
@@ -185,7 +211,7 @@ The commit is ready locally. It will be pushed once this repo has content, so th
 
 ## Risks and open points
 
-- Resources: the full production stack with the bonus overlay (ES 8 + mongo + ~15 containers) needs about 8–16 GB RAM on the validating machine. `validate.sh` checks the available memory.
+- Resources: the full production stack with the bonus overlay (ES 8 + mongo + ~15 containers) needs about 8–16 GB RAM on the validating machine. `validate.ts` checks the available memory.
 - Wildcard TLS depends on the user's DNS provider having a certbot plugin; the documented fallback is to bring your own certificate.
 - Some production env vars look stale (e.g. portals manager `ES_*`, metrics `DIRECTORY_URL`). The recipes only include variables confirmed in the current config schemas.
 - Capture sandboxing: choose between the seccomp profile and `--no-sandbox` during implementation, based on what the current capture image supports; document the choice.
