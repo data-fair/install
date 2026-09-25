@@ -29,3 +29,8 @@ test('mongo image workaround only on kernels affected by SERVER-121912', () => {
   expect(mongoKernelWorkaround('7.0.14')).toBeNull()
   expect(mongoKernelWorkaround('7.1.0')).toBeNull()
 })
+
+test('bonus test overrides provide a placeholder data-fair API key (the workers require one to start)', () => {
+  expect(testEnvOverrides('production+bonus').DATA_FAIR_API_KEY).toBe('not-provisioned')
+  expect(testEnvOverrides('production').DATA_FAIR_API_KEY).toBeUndefined()
+})

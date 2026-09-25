@@ -20,13 +20,16 @@ export function composeFiles (v: Variant, opts: { test: boolean }): string[] {
 // and reaches nginx from other containers through its network alias
 export function testEnvOverrides (v: Variant): Record<string, string> {
   if (v === 'local') return {}
-  return {
+  const overrides: Record<string, string> = {
     DOMAIN: 'datafair.localhost',
     BASE_URL: 'http://datafair.localhost',
     CONTACT_EMAIL: 'admin@example.com',
     ADMINS: '["admin@example.com"]',
     MAILS_TRANSPORT: '{"host":"maildev","port":1025,"ignoreTLS":true}'
   }
+  // the workers refuse to start without a key, a real one would require creating it in data-fair first
+  if (v === 'production+bonus') overrides.DATA_FAIR_API_KEY = 'not-provisioned'
+  return overrides
 }
 
 export function parseVariantArgs (argv: string[]): { variant: Variant, keep: boolean } {

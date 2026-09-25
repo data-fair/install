@@ -31,11 +31,35 @@ const dir = join(work, 'recipes', variant === 'local' ? 'local' : 'production')
 await writeFile(join(dir, '.env'), fillEnv(example, testEnvOverrides(variant)))
 const p: ComposeProject = { dir, name: `dfi-${variant.replace('+', '-')}`, files: composeFiles(variant, { test: true }), envFile: '.env' }
 log(`- work dir: ${dir}`)
+if (variant === 'production+bonus') log('- DATA_FAIR_API_KEY: not provisioned, the processings and catalogs workers are not exercised')
 const mongoImage = mongoKernelWorkaround(release())
 if (mongoImage) {
   await writeFile(join(dir, 'kernel-workaround.override.yaml'), `services:\n  mongo:\n    image: ${mongoImage}\n`)
   p.files.push('kernel-workaround.override.yaml')
   log(`- kernel ${release()} is affected by https://jira.mongodb.org/browse/SERVER-121912, mongo pinned to ${mongoImage}`)
+}
+
+// tear the stack down whatever happens, including an interruption (ctrl+c, kill)
+// a single shared promise, so that the main flow and a signal handler both wait for the same teardown
+let teardownPromise: Promise<void> | undefined
+const teardown = (): Promise<void> => {
+  teardownPromise ??= (async () => {
+    if (!keep) {
+      await runCompose(p, ['down', '-v', '--remove-orphans'], { inherit: true })
+      await rm(work, { recursive: true, force: true })
+    } else {
+      log(`- --keep: stack left running, stop it with: cd ${dir} && docker compose -p ${p.name} --env-file .env ${p.files.map(f => `-f ${f}`).join(' ')} down -v`)
+    }
+  })()
+  return teardownPromise
+}
+let interrupted = false
+for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+  process.on(signal, () => {
+    console.log(`\n${signal} received, tearing down`)
+    interrupted = true
+    teardown().finally(() => process.exit(130))
+  })
 }
 
 let healthy = false
@@ -81,18 +105,14 @@ try {
     const logs = await runCompose(p, ['logs', '--no-color', '--tail', '80'])
     report.push('', '## docker compose ps', '```', ps.stdout, '```', '', '## logs (tail)', '```', logs.stdout, '```')
   }
-  if (!keep) {
-    await runCompose(p, ['down', '-v', '--remove-orphans'], { inherit: true })
-    await rm(work, { recursive: true, force: true })
-  } else {
-    log(`- --keep: stack left running, stop it with: cd ${dir} && docker compose -p ${p.name} ${p.files.map(f => `-f ${f}`).join(' ')} down -v`)
-  }
+  await teardown()
 }
 
 // 6. production: check the https setup that the http-only validation replaced
 let tls: boolean | undefined
 if (variant !== 'local' && healthy && smokeCode === 0) tls = await runTlsCheck(log)
 
+if (interrupted) await new Promise(() => {}) // the signal handler exits once the teardown is over
 const ok = shouldRecord({ healthy, smokeCode, tls })
 await mkdir(resolve(root, 'test/reports'), { recursive: true })
 const reportPath = resolve(root, `test/reports/${date}-${variant.replace('+', '-')}.md`)

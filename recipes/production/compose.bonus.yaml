@@ -1,0 +1,118 @@
+# Data Fair – bonus services: plugins registry, processings, catalogs
+# usage: docker compose -f compose.yaml -f compose.bonus.yaml up -d
+# see docs/bonus-services.md, they work best with a koumoul.com subscription that gives access to the full plugins registry
+
+x-healthcheck: &healthcheck
+  interval: 10s
+  timeout: 5s
+  retries: 30
+  start_period: 20s
+
+x-bonus-env: &bonus-env
+  PRIVATE_DIRECTORY_URL: http://simple-directory:8080
+  PRIVATE_EVENTS_URL: http://events:8080
+  PRIVATE_REGISTRY_URL: http://registry:8080
+  CIPHER_PASSWORD: ${CIPHER_PASSWORD}
+  SECRET_EVENTS: ${SECRET}
+  SECRET_IDENTITIES: ${SECRET}
+  SECRET_REGISTRY: ${SECRET}
+
+x-worker-healthcheck: &worker-healthcheck
+  <<: *healthcheck
+  # workers have no HTTP API, their prometheus observer tells that they are alive
+  test: ['CMD', 'node', '-e', "fetch('http://localhost:9090/metrics').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+
+services:
+
+  data-fair:
+    environment:
+      PRIVATE_PROCESSINGS_URL: http://processings:8080
+      PRIVATE_CATALOGS_URL: http://catalogs:8080
+      PRIVATE_REGISTRY_URL: http://registry:8080
+      SECRET_CATALOGS: ${SECRET}
+      SECRET_REGISTRY: ${SECRET}
+  data-fair-worker:
+    environment:
+      PRIVATE_PROCESSINGS_URL: http://processings:8080
+      PRIVATE_CATALOGS_URL: http://catalogs:8080
+      PRIVATE_REGISTRY_URL: http://registry:8080
+      SECRET_CATALOGS: ${SECRET}
+      SECRET_REGISTRY: ${SECRET}
+
+  simple-directory:
+    environment:
+      IDENTITIES_WEBHOOKS: '[{"base":"http://data-fair:8080/api/v1/identities","key":"${SECRET}"},{"base":"http://events:8080/api/identities","key":"${SECRET}"},{"base":"http://portals-manager:8080/api/identities","key":"${SECRET}"},{"base":"http://processings:8080/api/identities","key":"${SECRET}"},{"base":"http://catalogs:8080/api/identities","key":"${SECRET}"}]'
+
+  registry:
+    image: ghcr.io/data-fair/registry:0.6
+    restart: unless-stopped
+    depends_on: { mongo: { condition: service_healthy } }
+    volumes:
+      - registry-data:/data
+    environment:
+      MONGO_URL: mongodb://mongo:27017/registry
+      PRIVATE_DIRECTORY_URL: http://simple-directory:8080
+      PRIVATE_EVENTS_URL: http://events:8080
+      SECRET_EVENTS: ${SECRET}
+      # processings, catalogs and data-fair authenticate to the registry with their SECRET_REGISTRY
+      SECRET_INTERNAL_SERVICES: ${SECRET}
+      API_KEYS_SALT: ${SECRET}
+      CIPHER_PASSWORD: ${CIPHER_PASSWORD}
+      OBSERVER_ACTIVE: 'false'
+    healthcheck:
+      <<: *healthcheck
+      test: ['CMD', 'node', '-e', "fetch('http://localhost:8080/api/ping').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+
+  processings:
+    image: ghcr.io/data-fair/processings:6
+    restart: unless-stopped
+    depends_on: { mongo: { condition: service_healthy } }
+    environment:
+      <<: *bonus-env
+      MONGO_URL: mongodb://mongo:27017/processings
+      OBSERVER_ACTIVE: 'false'
+    healthcheck:
+      <<: *healthcheck
+      test: ['CMD', 'node', '-e', "fetch('http://localhost:8080/api/v1/_ping').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+
+  processings-worker:
+    image: ghcr.io/data-fair/processings/worker:6
+    restart: unless-stopped
+    depends_on: { mongo: { condition: service_healthy } }
+    environment:
+      <<: *bonus-env
+      MONGO_URL: mongodb://mongo:27017/processings
+      DATA_FAIR_URL: ${BASE_URL}/data-fair
+      PRIVATE_DATA_FAIR_URL: http://data-fair:8080
+      DATA_FAIR_API_KEY: ${DATA_FAIR_API_KEY}
+      DATA_FAIR_ADMIN_MODE: 'true'
+      MAILS_TRANSPORT: ${MAILS_TRANSPORT}
+    healthcheck: *worker-healthcheck
+
+  catalogs:
+    image: ghcr.io/data-fair/catalogs:1
+    restart: unless-stopped
+    depends_on: { mongo: { condition: service_healthy } }
+    environment:
+      <<: *bonus-env
+      MONGO_URL: mongodb://mongo:27017/catalogs
+      SECRET_CATALOGS: ${SECRET}
+      OBSERVER_ACTIVE: 'false'
+    healthcheck:
+      <<: *healthcheck
+      test: ['CMD', 'node', '-e', "fetch('http://localhost:8080/api/ping').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+
+  catalogs-worker:
+    image: ghcr.io/data-fair/catalogs/worker:1
+    restart: unless-stopped
+    depends_on: { mongo: { condition: service_healthy } }
+    environment:
+      <<: *bonus-env
+      MONGO_URL: mongodb://mongo:27017/catalogs
+      PRIVATE_DATA_FAIR_URL: http://data-fair:8080
+      DATA_FAIR_API_KEY: ${DATA_FAIR_API_KEY}
+      HOST: ${DOMAIN}
+    healthcheck: *worker-healthcheck
+
+volumes:
+  registry-data:
