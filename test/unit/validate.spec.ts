@@ -5,6 +5,8 @@ test('shouldRecord only on full success', () => {
   expect(shouldRecord({ healthy: true, smokeCode: 0 })).toBe(true)
   expect(shouldRecord({ healthy: true, smokeCode: 1 })).toBe(false)
   expect(shouldRecord({ healthy: false, smokeCode: 0 })).toBe(false)
+  expect(shouldRecord({ healthy: true, smokeCode: 0, tls: false })).toBe(false)
+  expect(shouldRecord({ healthy: true, smokeCode: 0, tls: true })).toBe(true)
 })
 
 test('mergeValidated keeps versions of services not covered by this run', () => {

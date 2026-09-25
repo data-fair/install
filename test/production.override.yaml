@@ -1,0 +1,36 @@
+# test only: run the production recipe over http on a *.localhost domain, without certificates and with maildev
+# paths are relative to recipes/production
+services:
+  nginx:
+    image: nginx:1.29-alpine
+    ports: !override
+      - 80:80
+    volumes: !override
+      - ../../test/production/site.conf.template:/etc/nginx/templates/site.conf.template:ro
+      - ./nginx/http.conf:/etc/nginx/conf.d/data-fair-http.conf:ro
+      - ./nginx/proxy.conf:/etc/nginx/includes/proxy.conf:ro
+      - ./nginx/locations.conf:/etc/nginx/includes/locations.conf:ro
+      - ./nginx/portal-locations.conf:/etc/nginx/includes/portal-locations.conf:ro
+      - ./nginx/bonus-locations.conf:/etc/nginx/includes/bonus-locations.conf:ro
+      - nginx-cache:/var/cache/nginx/data-fair
+      - nginx-log-socket:/var/run/nginx-log
+    environment: !override
+      DOMAIN: ${DOMAIN}
+  simple-directory:
+    environment:
+      MAILDEV_ACTIVE: 'true'
+      MAILDEV_URL: ${BASE_URL}/mails/
+  portals-manager:
+    environment:
+      PORTAL_URL_PATTERN: http://{subdomain}.portal.${DOMAIN}
+  portal:
+    environment:
+      NUXT_PORTAL_URL_PATTERN: http://{subdomain}.portal.${DOMAIN}
+  maildev:
+    image: maildev/maildev:2.2.1
+    environment:
+      MAILDEV_BASE_PATHNAME: /mails
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:1080/mails/healthz']
+      interval: 10s
+      retries: 30

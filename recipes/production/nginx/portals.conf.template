@@ -1,0 +1,15 @@
+# HTTPS server block of the portals, rendered at startup with the DOMAIN and CERTBOT_DNS_PROVIDER variables
+# a wildcard certificate requires a DNS challenge, "portals.dns-<provider>" selects the certbot DNS plugin (see docs/portals.md)
+
+server {
+  listen 443 ssl;
+  listen [::]:443 ssl;
+  http2 on;
+  server_name *.portal.${DOMAIN};
+  ssl_certificate /etc/letsencrypt/live/portals.dns-${CERTBOT_DNS_PROVIDER}/fullchain.pem;
+  ssl_certificate_key /etc/letsencrypt/live/portals.dns-${CERTBOT_DNS_PROVIDER}/privkey.pem;
+  ssl_trusted_certificate /etc/letsencrypt/live/portals.dns-${CERTBOT_DNS_PROVIDER}/chain.pem;
+
+  include /etc/nginx/includes/proxy.conf;
+  include /etc/nginx/includes/portal-locations.conf;
+}

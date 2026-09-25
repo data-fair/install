@@ -6,6 +6,7 @@ import { spawnSync } from 'node:child_process'
 import { parseVariantArgs, recipeDir, composeFiles, testEnvOverrides, mongoKernelWorkaround } from './lib/recipes.ts'
 import { fillEnv } from './lib/env.ts'
 import { runCompose, waitHealthy, type ComposeProject } from './lib/compose.ts'
+import { runTlsCheck } from './lib/tls-check.ts'
 import { servicesFor, mergeValidated, shouldRecord, renderLastValidated, type Service, type ValidatedVersions } from './lib/services.ts'
 
 const root = resolve(import.meta.dirname, '..')
@@ -88,7 +89,11 @@ try {
   }
 }
 
-const ok = shouldRecord({ healthy, smokeCode })
+// 6. production: check the https setup that the http-only validation replaced
+let tls: boolean | undefined
+if (variant !== 'local' && healthy && smokeCode === 0) tls = await runTlsCheck(log)
+
+const ok = shouldRecord({ healthy, smokeCode, tls })
 await mkdir(resolve(root, 'test/reports'), { recursive: true })
 const reportPath = resolve(root, `test/reports/${date}-${variant.replace('+', '-')}.md`)
 await writeFile(reportPath, report.join('\n') + '\n')

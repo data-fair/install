@@ -1,0 +1,9 @@
+# test only: start the production nginx alone, certificates are signed by a local CA instead of letsencrypt
+services:
+  nginx:
+    ports: !override
+      - 18080:80
+      - 18443:443
+    environment:
+      USE_LOCAL_CA: '1'
+    depends_on: !reset {}

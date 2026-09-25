@@ -52,7 +52,8 @@ export function mergeValidated (prev: ValidatedVersions | null, variant: Variant
   }
 }
 
-export const shouldRecord = (r: { healthy: boolean, smokeCode: number }): boolean => r.healthy && r.smokeCode === 0
+// tls is only checked for the production recipe
+export const shouldRecord = (r: { healthy: boolean, smokeCode: number, tls?: boolean }): boolean => r.healthy && r.smokeCode === 0 && r.tls !== false
 
 export function renderLastValidated (v: ValidatedVersions): string {
   const runs = Object.entries(v.runs).map(([k, d]) => `${k} (${d})`).join(', ')
